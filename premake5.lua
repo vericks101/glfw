@@ -6,7 +6,8 @@ project "GLFW"
     targetdir ("bin/" .. outputdir .. "/%{prj.name}")
     objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
 
-    files {
+    files 
+	{
         "include/GLFW/glfw3.h",
         "include/GLFW/glfw3native.h",
         "src/internal.h",
@@ -32,7 +33,8 @@ project "GLFW"
     filter "system:windows"
         systemversion "latest"
 
-        files {
+        files
+		{
             "src/win32_init.c",
             "src/win32_module.c",
             "src/win32_joystick.c",
@@ -47,7 +49,8 @@ project "GLFW"
             "src/osmesa_context.c"
         }
 
-        defines { 
+        defines
+		{ 
             "_GLFW_WIN32",
             "_CRT_SECURE_NO_WARNINGS"
         }
