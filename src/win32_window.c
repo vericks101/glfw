@@ -36,6 +36,7 @@
 #include <string.h>
 #include <windowsx.h>
 #include <shellapi.h>
+#include <uxtheme.h>
 
 // Returns the window style for the specified window
 //
@@ -529,24 +530,73 @@ static void maximizeWindowManually(_GLFWwindow* window)
 //
 static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+	static RECT border_thickness;
+
     _GLFWwindow* window = GetPropW(hWnd, L"GLFW");
     if (!window)
     {
-        if (uMsg == WM_NCCREATE)
-        {
-            if (_glfwIsWindows10Version1607OrGreaterWin32())
-            {
-                const CREATESTRUCTW* cs = (const CREATESTRUCTW*) lParam;
-                const _GLFWwndconfig* wndconfig = cs->lpCreateParams;
+		switch (uMsg)
+		{
+			case WM_NCCREATE:
+			{
+				if (_glfwIsWindows10Version1607OrGreaterWin32())
+				{
+					const CREATESTRUCTW* cs = (const CREATESTRUCTW*)lParam;
+					const _GLFWwndconfig* wndconfig = cs->lpCreateParams;
 
-                // On per-monitor DPI aware V1 systems, only enable
-                // non-client scaling for windows that scale the client area
-                // We need WM_GETDPISCALEDSIZE from V2 to keep the client
-                // area static when the non-client area is scaled
-                if (wndconfig && wndconfig->scaleToMonitor)
-                    EnableNonClientDpiScaling(hWnd);
-            }
-        }
+					// On per-monitor DPI aware V1 systems, only enable
+					// non-client scaling for windows that scale the client area
+					// We need WM_GETDPISCALEDSIZE from V2 to keep the client
+					// area static when the non-client area is scaled
+					if (wndconfig && wndconfig->scaleToMonitor)
+						EnableNonClientDpiScaling(hWnd);
+
+					break;
+				}
+			}
+
+			case WM_CREATE:
+			{
+				if (_glfw.hints.window.titlebar)
+					break;
+
+				//find border thickness
+				SetRectEmpty(&border_thickness);
+				if (GetWindowLongPtr(hWnd, GWL_STYLE) & WS_THICKFRAME)
+				{
+					AdjustWindowRectEx(&border_thickness, GetWindowLongPtr(hWnd, GWL_STYLE) & ~WS_CAPTION, FALSE, NULL);
+					border_thickness.left *= -1;
+					border_thickness.top *= -1;
+				}
+				else// if (GetWindowLongPtr(hWnd, GWL_STYLE) & WS_BORDER)
+				{
+					SetRect(&border_thickness, 4, 4, 4, 4);
+				}
+
+				MARGINS margins = { 0 };
+				DwmExtendFrameIntoClientArea(hWnd, &margins);
+				SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
+
+				break;
+			}
+
+			case WM_ACTIVATE:
+			{
+				if (_glfw.hints.window.titlebar)
+					break;
+
+				// Extend the frame into the client area.
+				MARGINS margins = { 0 };
+				auto hr = DwmExtendFrameIntoClientArea(hWnd, &margins);
+
+				if (!SUCCEEDED(hr))
+				{
+					// Handle the error.
+				}
+
+				break;
+			}
+		}
 
         return DefWindowProcW(hWnd, uMsg, wParam, lParam);
     }
@@ -997,6 +1047,16 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             break;
         }
 
+		case  WM_NCCALCSIZE:
+		{
+			if (_glfw.hints.window.titlebar)
+				break;
+
+			if (lParam)
+				return 0;
+
+			break;
+		}
         case WM_SIZE:
         {
             const int width = LOWORD(lParam);
@@ -1242,6 +1302,61 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             DragFinish(drop);
             return 0;
         }
+
+		case WM_ACTIVATE:
+		{
+			if (_glfw.hints.window.titlebar)
+				break;
+
+			// Extend the frame into the client area.
+			MARGINS margins = { 0 };
+			auto hr = DwmExtendFrameIntoClientArea(hWnd, &margins);
+
+			if (!SUCCEEDED(hr))
+			{
+				// Handle the error.
+			}
+
+			break;
+		}
+		case WM_NCHITTEST:
+		{
+			if (_glfw.hints.window.titlebar)
+				break;
+
+			POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+			ScreenToClient(hWnd, &pt);
+			RECT rc;
+			GetClientRect(hWnd, &rc);
+
+			int titlebarHittest = 0;
+			_glfwInputTitleBarHitTest(window, pt.x, pt.y, &titlebarHittest);
+
+			if (titlebarHittest)
+			{
+				return HTCAPTION;
+			}
+			else
+			{
+				enum { left = 1, top = 2, right = 4, bottom = 8 };
+				int hit = 0;
+				if (pt.x < border_thickness.left)               hit |= left;
+				if (pt.x > rc.right - border_thickness.right)   hit |= right;
+				if (pt.y < border_thickness.top)                hit |= top;
+				if (pt.y > rc.bottom - border_thickness.bottom) hit |= bottom;
+
+				if (hit & top && hit & left)        return HTTOPLEFT;
+				if (hit & top && hit & right)       return HTTOPRIGHT;
+				if (hit & bottom && hit & left)     return HTBOTTOMLEFT;
+				if (hit & bottom && hit & right)    return HTBOTTOMRIGHT;
+				if (hit & left)                     return HTLEFT;
+				if (hit & top)                      return HTTOP;
+				if (hit & right)                    return HTRIGHT;
+				if (hit & bottom)                   return HTBOTTOM;
+
+				return HTCLIENT;
+			}
+		}
     }
 
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
@@ -1939,6 +2054,11 @@ void _glfwSetWindowResizableWin32(_GLFWwindow* window, GLFWbool enabled)
 void _glfwSetWindowDecoratedWin32(_GLFWwindow* window, GLFWbool enabled)
 {
     updateWindowStyles(window);
+}
+
+void _glfwPlatformSetWindowTitlebar(_GLFWwindow* window, GLFWbool enabled)
+{
+	updateWindowStyles(window);
 }
 
 void _glfwSetWindowFloatingWin32(_GLFWwindow* window, GLFWbool enabled)

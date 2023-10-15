@@ -400,6 +400,7 @@ struct _GLFWwndconfig
     GLFWbool      resizable;
     GLFWbool      visible;
     GLFWbool      decorated;
+	GLFWbool      titlebar;
     GLFWbool      focused;
     GLFWbool      autoIconify;
     GLFWbool      floating;
@@ -556,6 +557,7 @@ struct _GLFWwindow
 
     struct {
         GLFWwindowposfun          pos;
+		GLFWtitlebarhittestfun    tbhittest;
         GLFWwindowsizefun         size;
         GLFWwindowclosefun        close;
         GLFWwindowrefreshfun      refresh;
@@ -901,6 +903,8 @@ void* _glfwPlatformLoadModule(const char* path);
 void _glfwPlatformFreeModule(void* module);
 GLFWproc _glfwPlatformGetModuleSymbol(void* module, const char* name);
 
+void _glfwPlatformSetWindowTitlebar(_GLFWwindow* window, GLFWbool enabled);
+
 
 //////////////////////////////////////////////////////////////////////////
 //////                         GLFW event API                       //////
@@ -934,6 +938,8 @@ void _glfwInputJoystickHat(_GLFWjoystick* js, int hat, char value);
 
 void _glfwInputMonitor(_GLFWmonitor* monitor, int action, int placement);
 void _glfwInputMonitorWindow(_GLFWmonitor* monitor, _GLFWwindow* window);
+
+void _glfwInputTitleBarHitTest(_GLFWwindow* window, int posX, int posY, int* hit);
 
 #if defined(__GNUC__)
 void _glfwInputError(int code, const char* format, ...)
